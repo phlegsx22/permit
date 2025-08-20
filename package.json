@@ -1,0 +1,53 @@
+{
+  "name": "permitscript",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "s": "node permitSubmit.js",
+    "t": "node transfer.js",
+    "t2": "node transfer2.js",
+    "w": "node withdraw.js",
+    "start": "node index.js",
+    "authz": "node authzExecutor.js",
+    "auth": "node authz2.js",
+    "osmo": "node build/osmoTx.js",
+    "build": "tsc",
+
+    "chihuahua-unbonding": "node chihuahua.js unbonding",
+    "chihuahua-timed": "node chihuahua.js timed 5",
+    "chihuahua-continuous": "node chihuahua.js continuous",
+    "chihuahua-legacy": "node chihuahua.js continuous-legacy",
+
+    "atom-unbonding": "node atom.js unbonding",
+    "atom-timed": "node atom.js timed 5",
+    "atom-continuous": "node atom.js continuous",
+    "atom-legacy": "node atom.js continuous-legacy"
+
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@cosmjs/crypto": "^0.33.1",
+    "@cosmjs/proto-signing": "^0.33.1",
+    "@cosmjs/stargate": "^0.33.1",
+    "@injectivelabs/networks": "^1.14.43",
+    "@injectivelabs/sdk-ts": "^1.14.45",
+    "@injectivelabs/utils": "^1.14.43",
+    "@kava-labs/javascript-sdk": "^14.0.2",
+    "@nibiruchain/nibijs": "^6.1.3",
+    "@openzeppelin/contracts": "^5.2.0",
+    "@uniswap/permit2-sdk": "^1.3.0",
+    "axios": "^1.8.3",
+    "bip39": "^3.1.0",
+    "cosmjs-types": "^0.9.0",
+    "dotenv": "^16.4.7",
+    "ethers": "^5.7.2",
+    "mongodb": "^6.13.1",
+    "stridejs": "^0.13.0",
+    "typescript": "^5.8.2",
+    "zksync-ethers": "^5.7.2"
+  }
+}

@@ -1,0 +1,65 @@
+import { StargateClient, IndexedTx, SigningStargateClient, GasPrice } from "@cosmjs/stargate"
+import { DirectSecp256k1Wallet, OfflineDirectSigner } from "@cosmjs/proto-signing"
+import dotenv from 'dotenv'
+
+dotenv.config()
+
+const RPC_URL = 'https://cosmos-rpc.publicnode.com:443'
+
+const getSignerFromKey = async(): Promise<OfflineDirectSigner> => {
+    const privateKeyHex = process.env.GRANTER_PRIVATE_KEY!
+    // Convert hex string to Uint8Array
+    const privateKeyBytes = new Uint8Array(Buffer.from(privateKeyHex, 'hex'))
+    return DirectSecp256k1Wallet.fromKey(privateKeyBytes, "cosmos") // Add prefix if needed
+}
+
+const runAll = async(): Promise<void> => {
+    console.log("Starting....")
+
+    const signer: OfflineDirectSigner = await getSignerFromKey()
+    const accounts = await signer.getAccounts()
+    console.log("Accounts:", accounts)
+
+    const address = accounts[0].address
+    console.log("Address from the signer: ", address)
+
+    // Set gas price when connecting the signing client
+    const gasPrice = GasPrice.fromString("0.025uatom") // Use chihuahua denom, not osmo
+    const signingClient = await SigningStargateClient.connectWithSigner(RPC_URL, signer, {
+        gasPrice: gasPrice
+    })
+    
+    console.log(`With client, chain id:`, await signingClient.getChainId(), `, height:`, await signingClient.getHeight())
+    
+    // Get balance in correct denom for chihuahua chain
+    const balance = await signingClient.getBalance(address, 'uatom')
+    console.log(balance)
+
+   while(true) {
+    try {
+        const result = await signingClient.signAndBroadcast(
+            address,
+            [
+             {
+                 typeUrl: '/cosmos.bank.v1beta1.MsgSend',
+                 value: {
+                     fromAddress: address,
+                     toAddress: process.env.GRANTEE_RECIPIENT_ADDRESS!,
+                     amount: [
+                         { denom: balance.denom, amount: '1000' }
+                     ],
+                 },
+             },
+             //message 2
+            ],
+            //fee
+           'auto'
+         )
+         console.log("This is the result of the Tx: ", result.gasUsed, result.transactionHash)
+    } catch (error) {
+        console.error("This transaction failed: ", error)
+    }
+   }
+}
+
+runAll().catch(console.error)
