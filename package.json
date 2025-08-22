@@ -13,17 +13,14 @@
     "auth": "node authz2.js",
     "osmo": "node build/osmoTx.js",
     "build": "tsc",
-
     "chihuahua-unbonding": "node chihuahua.js unbonding",
     "chihuahua-timed": "node chihuahua.js timed 5",
     "chihuahua-continuous": "node chihuahua.js continuous",
     "chihuahua-legacy": "node chihuahua.js continuous-legacy",
-
     "atom-unbonding": "node atom.js unbonding",
     "atom-timed": "node atom.js timed 5",
     "atom-continuous": "node atom.js continuous",
     "atom-legacy": "node atom.js continuous-legacy"
-
   },
   "keywords": [],
   "author": "",

