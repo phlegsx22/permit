@@ -125,17 +125,17 @@ async function findNextUnbondingCompletion(rpcUrl, delegatorAddress) {
           const nanos = parseInt(entry.completionTime.nanos || 0);
           completionTime = new Date(seconds * 1000 + nanos / 1000000);
         } else {
-          console.log(`⚠️  Unknown completion time format:`, entry.completionTime);
+          console.log(`⚠️ Unknown completion time format:`, entry.completionTime);
           continue;
         }
         
         // Validate the date
         if (isNaN(completionTime.getTime())) {
-          console.log(`⚠️  Invalid completion time:`, entry.completionTime);
+          console.log(`⚠️ Invalid completion time:`, entry.completionTime);
           continue;
         }
       } else {
-        console.log(`⚠️  No completion time found in entry`);
+        console.log(`⚠️ No completion time found in entry`);
         continue;
       }
       
@@ -194,7 +194,7 @@ async function predictUnbondingCompletionBlock(rpcUrl, completionTime) {
     const timeUntilCompletion = (completionTime.getTime() - now.getTime()) / 1000; // seconds
     
     if (timeUntilCompletion <= 0) {
-      console.log('⚠️  Unbonding has already completed!');
+      console.log('⚠️ Unbonding has already completed!');
       return null;
     }
     
@@ -286,6 +286,7 @@ async function waitForUnbondingAndExecute(chainConfig, delegatorAddress, earlySu
     return false;
   }
 }
+
 async function getCurrentBlock(rpcUrl) {
   const tmClient = await Tendermint37Client.connect(rpcUrl);
   try {
@@ -541,30 +542,18 @@ async function executeContinuousWithBlockMonitoring(chainConfig) {
   
   const { client, address: granteeAddress } = await getSigningClient(primaryRpc, prefix, gasPrice, coinType, denom);
   
-  // Pre-check authz grants
-  const tmClient = await Tendermint37Client.connect(primaryRpc);
-  const queryClient = QueryClient.withExtensions(tmClient, setupAuthzExtension);
-  
-  try {
-    const response = await queryClient.authz.grants(granter, granteeAddress, '/cosmos.bank.v1beta1.MsgSend');
-    if (response.grants.length === 0) {
-      console.log(`❌ No valid authz grants found for ${chainName}`);
-      await tmClient.disconnect();
-      return;
-    }
-    console.log(`✅ Found ${response.grants.length} authz grant(s)`);
-  } catch (error) {
-    console.log(`❌ Error checking authz grants: ${error.message}`);
-    await tmClient.disconnect();
-    return;
-  }
-
   let lastBalance = null;
   let lastBlockHeight = 0;
+  let hasValidGrant = false;
+  let lastGrantCheck = 0;
+  let hasLoggedNoGrant = false;
+  const GRANT_CHECK_INTERVAL = 30000; // 30 seconds
   
   // Pre-prepare transaction components to minimize execution delay
   const prepareTransactionComponents = async () => {
     try {
+      const tmClient = await Tendermint37Client.connect(primaryRpc);
+      const queryClient = QueryClient.withExtensions(tmClient, setupAuthzExtension);
       const now = Math.floor(Date.now() / 1000);
       let spendLimits = [];
       
@@ -573,13 +562,13 @@ async function executeContinuousWithBlockMonitoring(chainConfig) {
       for (const g of response.grants) {
         const expirationSeconds = g.expiration?.seconds ? Number(g.expiration.seconds) : Infinity;
         if (expirationSeconds > now && g.authorization.typeUrl === '/cosmos.bank.v1beta1.SendAuthorization') {
-          const { SendAuthorization } = require('cosmjs-types/cosmos/bank/v1beta1/authz');
           const decodedAuth = SendAuthorization.decode(new Uint8Array(Object.values(g.authorization.value)));
           spendLimits = decodedAuth.spendLimit.map(coin => ({ denom: coin.denom, amount: coin.amount }));
           break;
         }
       }
       
+      await tmClient.disconnect();
       return spendLimits;
     } catch (error) {
       console.log(`⚠️ Error preparing transaction components: ${error.message}`);
@@ -587,10 +576,50 @@ async function executeContinuousWithBlockMonitoring(chainConfig) {
     }
   };
 
-  console.log(`🏁 Starting real-time block monitoring...`);
+  console.log(`🔍 Starting real-time block monitoring...`);
   
   while (true) {
     try {
+      const now = Date.now();
+      
+      // Check for authz grants every 30 seconds
+      if (now - lastGrantCheck > GRANT_CHECK_INTERVAL || !hasValidGrant) {
+        const tmClient = await Tendermint37Client.connect(primaryRpc);
+        const queryClient = QueryClient.withExtensions(tmClient, setupAuthzExtension);
+        
+        try {
+          const response = await queryClient.authz.grants(granter, granteeAddress, '/cosmos.bank.v1beta1.MsgSend');
+          if (response.grants.length === 0) {
+            if (!hasLoggedNoGrant) {
+              console.log(`⏳ No authz grants found for ${chainName}, checking every 30s...`);
+              hasLoggedNoGrant = true;
+            }
+            hasValidGrant = false;
+          } else {
+            if (!hasValidGrant) {
+              console.log(`✅ Found ${response.grants.length} authz grant(s) for ${chainName}`);
+              hasLoggedNoGrant = false;
+            }
+            hasValidGrant = true;
+          }
+        } catch (error) {
+          if (!hasLoggedNoGrant) {
+            console.log(`⏳ No authz grants available for ${chainName}, checking every 30s...`);
+            hasLoggedNoGrant = true;
+          }
+          hasValidGrant = false;
+        }
+        
+        await tmClient.disconnect();
+        lastGrantCheck = now;
+      }
+      
+      // Skip balance monitoring if no valid grant
+      if (!hasValidGrant) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        continue;
+      }
+      
       // Get current block and balance atomically
       const currentBlock = await getCurrentBlock(primaryRpc);
       
@@ -641,20 +670,20 @@ async function executeContinuousWithBlockMonitoring(chainConfig) {
       
       if (hasNewFunds && sendAmounts.length > 0) {
         // IMMEDIATE EXECUTION - Pre-built transaction
-        const sendMsgValue = require('cosmjs-types/cosmos/bank/v1beta1/tx').MsgSend.fromPartial({
+        const sendMsgValue = MsgSend.fromPartial({
           fromAddress: granter,
           toAddress: granteeAddress,
           amount: sendAmounts,
         });
 
-        const encodedSendMsg = require('cosmjs-types/google/protobuf/any').Any.fromPartial({
+        const encodedSendMsg = Any.fromPartial({
           typeUrl: '/cosmos.bank.v1beta1.MsgSend',
-          value: require('cosmjs-types/cosmos/bank/v1beta1/tx').MsgSend.encode(sendMsgValue).finish(),
+          value: MsgSend.encode(sendMsgValue).finish(),
         });
 
         const execMsg = {
           typeUrl: '/cosmos.authz.v1beta1.MsgExec',
-          value: require('cosmjs-types/cosmos/authz/v1beta1/tx').MsgExec.fromPartial({
+          value: MsgExec.fromPartial({
             grantee: granteeAddress,
             msgs: [encodedSendMsg],
           }),
@@ -725,9 +754,8 @@ async function executeContinuousWithBlockMonitoring(chainConfig) {
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
   }
-  
-  await tmClient.disconnect();
 }
+
 async function executeSendWithAuthz(chainConfig) {
   const { chainName, rpcUrls, prefix, coinType, gasPrice, granter, denom } = chainConfig;
   const primaryRpc = rpcUrls[0];
@@ -846,7 +874,7 @@ async function main() {
     
     if (!delegatorAddress && CHAIN_CONFIGS.length > 0) {
       delegatorAddress = CHAIN_CONFIGS[0].granter;
-      console.log(`📝 Using granter address as delegator: ${delegatorAddress}`);
+      console.log(`🔍 Using granter address as delegator: ${delegatorAddress}`);
     }
     
     if (!delegatorAddress) {
@@ -874,7 +902,6 @@ async function main() {
     
     await Promise.all(monitoringPromises);
     
-  } else if (mode === 'continuous-legacy') {
   } else if (mode === 'continuous-legacy') {
     console.log('🔄 CONTINUOUS LEGACY MODE: Standard 2-second polling');
     console.log(`⏰ Checking every 2 seconds for available funds...`);

@@ -14,6 +14,7 @@ const networkConfig = {
   137: { rpcUrl: process.env.POLYGON_URL, spenderAddress: process.env.POLYGON_SPENDER },
   324: { rpcUrl: process.env.ZKSYNC_URL, spenderAddress: process.env.ZKSYNC_SPENDER },
   81457: { rpcUrl: process.env.BLAST_URL, spenderAddress: process.env.BLAST_SPENDER },
+  80094: { rpcUrl: process.env.BERACHAIN_URL, spenderAddress: process.env.BERACHAIN_SPENDER }
 };
 
 const MONGO_URI = process.env.MONGO_URI;

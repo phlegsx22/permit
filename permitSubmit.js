@@ -60,6 +60,11 @@ const networkConfig = {
     spenderAddress: process.env.BLAST_SPENDER,
     permit2Address: process.env.BLAST_PERMIT2
 
+  },
+  80094: {
+    rpcUrl: process.env.BERACHAIN_URL,
+    spenderAddress: process.env.BERACHAIN_SPENDER,
+    permit2Address: process.env.BERACHAIN_PERMIT2
   }
 
 }

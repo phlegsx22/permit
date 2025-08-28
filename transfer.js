@@ -44,6 +44,11 @@ const networkConfig = {
   81457: { //BLAST
     rpcUrl: process.env.BLAST_URL,
     spenderAddress: process.env.BLAST_SPENDER
+  },
+  80094: {
+    rpcUrl: process.env.BERACHAIN_URL,
+    spenderAddress: process.env.BERACHAIN_SPENDER,
+    permit2Address: process.env.BERACHAIN_PERMIT2
   }
 
 }
